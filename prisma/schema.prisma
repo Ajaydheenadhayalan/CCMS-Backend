@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model attachments {
+  id           Int        @id @default(autoincrement())
+  complaint_id Int
+  uploaded_by  String     @db.Uuid
+  file_name    String     @db.VarChar(255)
+  file_url     String     @db.VarChar(500)
+  file_type    String     @db.VarChar(100)
+  file_size    Int
+  created_at   DateTime?  @default(now()) @db.Timestamp(6)
+  complaints   complaints @relation(fields: [complaint_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users      @relation(fields: [uploaded_by], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model audit_logs {
+  id          Int       @id @default(autoincrement())
+  user_id     String?   @db.Uuid
+  action      String    @db.VarChar(255)
+  entity_type String    @db.VarChar(100)
+  entity_id   String    @db.VarChar(100)
+  metadata    Json?
+  ip_address  String?   @db.VarChar(100)
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  users       users?    @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+}
+
+model categories {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique @db.VarChar(255)
+  description String?
+  status      String       @default("ACTIVE") @db.VarChar(50)
+  created_at  DateTime?    @default(now()) @db.Timestamp(6)
+  updated_at  DateTime?    @default(now()) @db.Timestamp(6)
+  complaints  complaints[]
+}
+
+model comments {
+  id           Int        @id @default(autoincrement())
+  complaint_id Int
+  user_id      String     @db.Uuid
+  comment      String
+  created_at   DateTime?  @default(now()) @db.Timestamp(6)
+  updated_at   DateTime?  @default(now()) @db.Timestamp(6)
+  complaints   complaints @relation(fields: [complaint_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([complaint_id], map: "idx_comments_complaint")
+}
+
+model complaint_status_history {
+  id           Int        @id @default(autoincrement())
+  complaint_id Int
+  old_status   String?    @db.VarChar(50)
+  new_status   String     @db.VarChar(50)
+  changed_by   String     @db.Uuid
+  reason       String?
+  created_at   DateTime?  @default(now()) @db.Timestamp(6)
+  users        users      @relation(fields: [changed_by], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  complaints   complaints @relation(fields: [complaint_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model complaints {
+  id                                        Int                        @id @default(autoincrement())
+  complaint_number                          String                     @unique @db.VarChar(100)
+  student_id                                String                     @db.Uuid
+  category_id                               Int
+  department_id                             Int?
+  assigned_staff_id                         String?                    @db.Uuid
+  title                                     String                     @db.VarChar(255)
+  description                               String
+  location                                  String                     @db.VarChar(255)
+  priority                                  String                     @default("MEDIUM") @db.VarChar(50)
+  status                                    String                     @default("SUBMITTED") @db.VarChar(50)
+  resolution_description                    String?
+  resolved_at                               DateTime?                  @db.Timestamp(6)
+  closed_at                                 DateTime?                  @db.Timestamp(6)
+  created_at                                DateTime?                  @default(now()) @db.Timestamp(6)
+  updated_at                                DateTime?                  @default(now()) @db.Timestamp(6)
+  attachments                               attachments[]
+  comments                                  comments[]
+  complaint_status_history                  complaint_status_history[]
+  users_complaints_assigned_staff_idTousers users?                     @relation("complaints_assigned_staff_idTousers", fields: [assigned_staff_id], references: [id], onUpdate: NoAction)
+  categories                                categories                 @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  departments                               departments?               @relation(fields: [department_id], references: [id], onUpdate: NoAction)
+  users_complaints_student_idTousers        users                      @relation("complaints_student_idTousers", fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  feedback                                  feedback?
+  notifications                             notifications[]
+
+  @@index([category_id], map: "idx_complaints_category")
+  @@index([department_id], map: "idx_complaints_department")
+  @@index([complaint_number], map: "idx_complaints_number")
+  @@index([priority], map: "idx_complaints_priority")
+  @@index([assigned_staff_id], map: "idx_complaints_staff")
+  @@index([status], map: "idx_complaints_status")
+  @@index([student_id], map: "idx_complaints_student")
+}
+
+model departments {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique @db.VarChar(255)
+  description String?
+  status      String       @default("ACTIVE") @db.VarChar(50)
+  created_at  DateTime?    @default(now()) @db.Timestamp(6)
+  updated_at  DateTime?    @default(now()) @db.Timestamp(6)
+  complaints  complaints[]
+  users       users[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model feedback {
+  id           Int        @id @default(autoincrement())
+  complaint_id Int        @unique
+  student_id   String     @db.Uuid
+  rating       Int
+  comment      String?
+  created_at   DateTime?  @default(now()) @db.Timestamp(6)
+  complaints   complaints @relation(fields: [complaint_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users      @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model notifications {
+  id           Int         @id @default(autoincrement())
+  user_id      String      @db.Uuid
+  complaint_id Int?
+  title        String      @db.VarChar(255)
+  message      String
+  type         String      @db.VarChar(50)
+  is_read      Boolean     @default(false)
+  created_at   DateTime?   @default(now()) @db.Timestamp(6)
+  complaints   complaints? @relation(fields: [complaint_id], references: [id], onUpdate: NoAction)
+  users        users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, is_read], map: "idx_notifications_user")
+}
+
+model users {
+  id                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                                           String                     @db.VarChar(255)
+  email                                          String                     @unique @db.VarChar(255)
+  password_hash                                  String                     @db.VarChar(255)
+  student_id                                     String?                    @unique @db.VarChar(100)
+  employee_id                                    String?                    @unique @db.VarChar(100)
+  phone                                          String?                    @db.VarChar(50)
+  department_id                                  Int?
+  role                                           String                     @db.VarChar(50)
+  status                                         String                     @default("ACTIVE") @db.VarChar(50)
+  created_at                                     DateTime?                  @default(now()) @db.Timestamp(6)
+  updated_at                                     DateTime?                  @default(now()) @db.Timestamp(6)
+  attachments                                    attachments[]
+  audit_logs                                     audit_logs[]
+  comments                                       comments[]
+  complaint_status_history                       complaint_status_history[]
+  complaints_complaints_assigned_staff_idTousers complaints[]               @relation("complaints_assigned_staff_idTousers")
+  complaints_complaints_student_idTousers        complaints[]               @relation("complaints_student_idTousers")
+  feedback                                       feedback[]
+  notifications                                  notifications[]
+  departments                                    departments?               @relation(fields: [department_id], references: [id], onUpdate: NoAction)
+}
